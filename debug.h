@@ -5,9 +5,9 @@
 
 char buf[20];
 struct tm *sTm;
-
+time_t now;
 #define LOG(x)                                  \
-time_t now = time(0);                           \
+now = time(0);                                  \
 sTm = gmtime(&now);                             \
 strftime(buf, sizeof(buf), "%H:%M:%S", sTm);    \
 printf("%s %s\n", buf, x);                      \

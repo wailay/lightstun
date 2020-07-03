@@ -200,6 +200,8 @@ int main() {
 			} else if (events[i].data.fd == serverinfo->udp_listener){ // udp connection
 				
 				LOG("got udp connection");
+
+				bzero(header_buffer, STUN_HEADER_SIZE);
 				status = recvfrom(events[i].data.fd, header_buffer, STUN_HEADER_SIZE, 0, (struct sockaddr*) &remote_conn, &remote_conn_len);
 				
 				fill_client_info(client_info, &remote_conn);
@@ -211,37 +213,31 @@ int main() {
 			
 				
 			} else { //data from tcp connection 
+				LOG("got tcp data");
 
-				char buf[5000];
-				bzero(&buf, 5000);
-				status = recv(events[i].data.fd, buf, 5000, 0);
+				bzero(header_buffer, STUN_HEADER_SIZE);
+				status = recv(events[i].data.fd, header_buffer, STUN_HEADER_SIZE, 0);
 				handleError(status, "recv");
 
-				// check_stun_header();
-				// send_stun_request();
-				// close_connection();
-
-				// check if client has sent a stun packet
-				// send client xor map address back
-				char str[INET_ADDRSTRLEN];
-				inet_ntop(remote_conn.sin_family, &remote_conn.sin_addr, str, INET_ADDRSTRLEN);
-				printf("ip from %s\n", str);
+				fill_client_info(client_info, &remote_conn);
+				parse_stun_header(sh, header_buffer);
+				if (!is_valid_stun_header(sh)) continue;
+				process_request(success_buffer, sh, client_info, success_header, xor_map_attr);
 				
-				status = send(events[i].data.fd, "response from server!\n", strlen("response from server!\n"), MSG_NOSIGNAL);
+				status = send(events[i].data.fd, success_buffer, message_len, MSG_NOSIGNAL);
 				
 				if (status < 0) {
 					if(errno == EPIPE) {
-						printf("closing connection\n");
 						close(events[i].data.fd);
 					}
 				}
 
+				close(events[i].data.fd);
 			}
 		}
 	}
 
 	free(&epoll_ev);
 	freeserver(serverinfo);
-	
 	return 0;    
 }

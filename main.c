@@ -12,7 +12,7 @@
 #include <sys/epoll.h>
 #include <fcntl.h>
 #include <arpa/inet.h>
-#include <time.h>
+#include "debug.h"
 #include "stun.h"
 
 #define MAX_EVENTS 1
@@ -46,19 +46,6 @@ void print_32(uint32_t* buf, int n){
 		printf("%08x ", buf[i]);
 	}
 	printf("\n");
-}
-void log(const char* msg){
-	char buf[20];
-	struct tm *sTm;
-
-	time_t now = time(0);
-
-	sTm = gmtime(&now);
-
-	strftime(buf, sizeof(buf), "%H:%M:%S", sTm);
-	printf("%s %s\n", buf, msg);
-
-	return;
 }
 
 ///////////////////////////////////////////
@@ -159,7 +146,7 @@ void setnonblocking(int fd) {
 int main() {
 	
 	server *serverinfo = malloc(1 * sizeof(server));
-	const char* port = "19301";
+	const char* port = "6677";
 	init_server(port, serverinfo);
 
 	int new_conn;
@@ -188,7 +175,10 @@ int main() {
     struct stun_attr *xor_map_attr;
 	init_xor_map_attr(&xor_map_attr);
 	
-	
+	uint8_t *header_buffer = calloc(STUN_HEADER_SIZE, sizeof(uint8_t));
+	size_t message_len = STUN_HEADER_SIZE + XOR_MAP_IPV4_ATTR_SIZE;
+	uint8_t *success_buffer = calloc(message_len, sizeof(uint8_t)); 
+
 	for(;;){
 
 		ready_fds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
@@ -199,7 +189,7 @@ int main() {
 
 	
 			if (events[i].data.fd == serverinfo->tcp_listener) {
-				log("got tcp connection");
+				LOG("got tcp connection");
 				
 				new_conn = accept(events[i].data.fd , (struct sockaddr*) &remote_conn, &remote_conn_len);
 				
@@ -209,32 +199,17 @@ int main() {
 				
 			} else if (events[i].data.fd == serverinfo->udp_listener){ // udp connection
 				
-				int header_len = 20;
-				uint8_t *buf = calloc(header_len, sizeof(uint8_t));
-				log("got udp connection");
-				status = recvfrom(events[i].data.fd, buf, header_len, 0, (struct sockaddr*) &remote_conn, &remote_conn_len);
+				LOG("got udp connection");
+				status = recvfrom(events[i].data.fd, header_buffer, STUN_HEADER_SIZE, 0, (struct sockaddr*) &remote_conn, &remote_conn_len);
 				
 				fill_client_info(client_info, &remote_conn);
-				parse_stun_header(sh, buf);
+				parse_stun_header(sh, header_buffer);
 				if (!is_valid_stun_header(sh)) continue;
-				
-				// printf("message type : %x\n", sh->message_type);
-				// printf("message length : %x\n", sh->message_length);
-				// printf("message magic cookie : %x\n", sh->magic_cookie);
-				// print_32(sh->transaction_id, 3);
-
-				// printf("family : %x\n", client_info->family);
-				// printf("port : %x\n", client_info->port);
-				// printf("ip : %x\n", client_info->ip_addr);
-
-				size_t len = STUN_HEADER_SIZE + XOR_MAP_IPV4_ATTR_SIZE;
-				uint8_t *success_buffer = calloc(len, sizeof(uint8_t)); 
 				process_request(success_buffer, sh, client_info, success_header, xor_map_attr);
-				// print_byte(success_buffer, 32);
-				status = sendto(events[i].data.fd, success_buffer, len, 0, (struct sockaddr*) &remote_conn, remote_conn_len);
-				// exit(0);
-				free(success_buffer);
-				free(buf);
+		
+				status = sendto(events[i].data.fd, success_buffer, message_len, 0, (struct sockaddr*) &remote_conn, remote_conn_len);
+			
+				
 			} else { //data from tcp connection 
 
 				char buf[5000];
@@ -267,5 +242,6 @@ int main() {
 
 	free(&epoll_ev);
 	freeserver(serverinfo);
+	
 	return 0;    
 }

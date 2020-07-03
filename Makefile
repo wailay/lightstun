@@ -1,16 +1,20 @@
-CC = gcc
-SOURCES = $(wildcard *.c)
-OBJS = $(SOURCES:.c=.o)
-TARGET = main
-
-.PHONY : clean all
+CC=gcc
+SOURCES=$(wildcard *.c)
+OBJS=$(SOURCES:.c=.o)
+TARGET=main
+CFLAGS=
+.PHONY : clean all debug
 
 $(TARGET):$(OBJS)
-	$(CC) $^ -o $@
+	$(CC) $(CFLAGS) $^ -o $@
  
 %.o:%.c
-	$(CC) -c $< 
+	$(CC) $(CFLAGS) -c $< 
 
+
+debug: CFLAGS += -DDEBUG
+debug: clean 
+debug: $(TARGET)
 
 clean:
 	rm *.o $(TARGET)

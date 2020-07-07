@@ -1,0 +1,14 @@
+[Unit]
+Description=Basic stun server
+After=network.target
+After=network-online.target
+After=remote-fs.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/lightstun
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+Alias=lightstun.service

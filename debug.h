@@ -3,19 +3,19 @@
 
 #ifdef DEBUG
 
-char buf[20];
+char time_buf[20];
 struct tm *sTm;
 time_t now;
-#define LOG(x)                                  \
-now = time(0);                                  \
-sTm = gmtime(&now);                             \
-strftime(buf, sizeof(buf), "%H:%M:%S", sTm);    \
-printf("%s %s\n", buf, x);                      \
+#define LOG(fmt, ...)                                          \
+now = time(0);                                          \
+sTm = gmtime(&now);                                     \
+strftime(time_buf, sizeof(time_buf), "%H:%M:%S", sTm);  \
+printf("%s : ", time_buf);                                 \
+printf(fmt, __VA_ARGS__);                                \
 
 #else 
 
-#define LOG(x)  \
-do {            \
-}while(0);      \
+#define LOG(fmt,...)              \
+fprintf(stderr, fmt, __VA_ARGS__); \
 
 #endif

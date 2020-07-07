@@ -13,5 +13,5 @@ The code is not really portable, will work only on Linux for now.
 
 TODOS:
  
- * Implement DTLS and TLS
+ * Implement TLS over TCP - read more about dtls
  * Better error handling and error response.

@@ -1,19 +1,17 @@
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <sys/wait.h>
 #include <netdb.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
-#include <signal.h>
-#include <poll.h>
 #include <errno.h>
 #include <sys/epoll.h>
 #include <fcntl.h>
 #include <arpa/inet.h>
 #include "debug.h"
 #include "stun.h"
+#include "ossl.h"
 
 #define MAX_EVENTS 1
 
@@ -41,37 +39,11 @@ void handleError(int errnum, const char *msg) {
 }
 
 
-void print_32(uint32_t* buf, int n){
-	for (int i = 0; i < n; i++){
-		printf("%08x ", buf[i]);
-	}
-	printf("\n");
-}
-
-///////////////////////////////////////////
-// STUN FUNCTIONS
-//////////////////////////////////////////
-
-
 
 /////////////////////////////////////////
 
 /*
-   struct addrinfo {
-        int              ai_flags;     // AI_PASSIVE, AI_CANONNAME, etc.
-        int              ai_family;    // AF_INET, AF_INET6, AF_UNSPEC
-        int              ai_socktype;  // SOCK_STREAM, SOCK_DGRAM
-        int              ai_protocol;  // use 0 for "any"
-        size_t           ai_addrlen;   // size of ai_addr in bytes
-        struct sockaddr *ai_addr;      // struct sockaddr_in or _in6
-        char            *ai_canonname; // full canonical hostname
-    
-        struct addrinfo *ai_next;      // linked list, next node
-    };
-*/ 
-
-/*
-returns a socket file descriptor ipv4 connection on TCP/PORT 
+fill server struct with TCP and UDP socket file descriptor
 */
 void init_server(const char* PORT, struct server *s){
 
@@ -143,10 +115,16 @@ void setnonblocking(int fd) {
 	handleError(flags, "fcntl set nonblock");
 }
 
-int main() {
+int main(int argc, char **argv) {
 	
+	char* port = "3478";
+
+	if (argc > 1) {
+		port = argv[1];
+	} 
+
+	printf("listening on port %s\n", port);
 	server *serverinfo = malloc(1 * sizeof(server));
-	const char* port = "6677";
 	init_server(port, serverinfo);
 
 	int new_conn;
@@ -179,6 +157,7 @@ int main() {
 	size_t message_len = STUN_HEADER_SIZE + XOR_MAP_IPV4_ATTR_SIZE;
 	uint8_t *success_buffer = calloc(message_len, sizeof(uint8_t)); 
 
+
 	for(;;){
 
 		ready_fds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
@@ -189,31 +168,35 @@ int main() {
 
 	
 			if (events[i].data.fd == serverinfo->tcp_listener) {
-				LOG("got tcp connection");
-				
+				LOG("%s\n", "got tcp connection");
+
 				new_conn = accept(events[i].data.fd , (struct sockaddr*) &remote_conn, &remote_conn_len);
-				
+				handleError(new_conn, "accept tcp");
 				setnonblocking(new_conn); //in case client sends no data, do not block on read.
-				add_socket_to_epoll(epollfd, &epoll_ev, new_conn, EPOLLET);
+				
+				
+				add_socket_to_epoll(epollfd, &epoll_ev, new_conn, 0);
+				
 				
 				
 			} else if (events[i].data.fd == serverinfo->udp_listener){ // udp connection
 				
-				LOG("got udp connection");
-
+				LOG("%s\n", "got udp connection");
 				bzero(header_buffer, STUN_HEADER_SIZE);
+
 				status = recvfrom(events[i].data.fd, header_buffer, STUN_HEADER_SIZE, 0, (struct sockaddr*) &remote_conn, &remote_conn_len);
-				
+			
+
 				fill_client_info(client_info, &remote_conn);
 				parse_stun_header(sh, header_buffer);
 				if (!is_valid_stun_header(sh)) continue;
 				process_request(success_buffer, sh, client_info, success_header, xor_map_attr);
-		
+
 				status = sendto(events[i].data.fd, success_buffer, message_len, 0, (struct sockaddr*) &remote_conn, remote_conn_len);
-			
+
 				
 			} else { //data from tcp connection 
-				LOG("got tcp data");
+				LOG("%s\n", "got tcp data");
 
 				bzero(header_buffer, STUN_HEADER_SIZE);
 				status = recv(events[i].data.fd, header_buffer, STUN_HEADER_SIZE, 0);
@@ -225,7 +208,7 @@ int main() {
 				process_request(success_buffer, sh, client_info, success_header, xor_map_attr);
 				
 				status = send(events[i].data.fd, success_buffer, message_len, MSG_NOSIGNAL);
-				
+
 				if (status < 0) {
 					if(errno == EPIPE) {
 						close(events[i].data.fd);
@@ -239,5 +222,11 @@ int main() {
 
 	free(&epoll_ev);
 	freeserver(serverinfo);
+	free_stun_header(sh);
+	free_stun_header(success_header);
+	free_stun_attr(xor_map_attr);
+	free(&success_buffer);
+	free(&header_buffer);
+
 	return 0;    
 }

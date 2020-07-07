@@ -1,8 +1,8 @@
 CC=gcc
 SOURCES=$(wildcard *.c)
 OBJS=$(SOURCES:.c=.o)
-TARGET=main
-CFLAGS=
+TARGET=lightstun
+CFLAGS=-lssl -lcrypto
 .PHONY : clean all debug
 
 $(TARGET):$(OBJS)
